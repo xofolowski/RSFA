@@ -1,0 +1,2 @@
+/^Subject: [^\[]*\[[^\]]*\].*/ FILTER rsfa-filter: 
+/^Subject: [^|]*\|[^|]*@[^|]*\|.*/ FILTER rsfa-filter:
