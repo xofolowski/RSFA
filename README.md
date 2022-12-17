@@ -8,7 +8,7 @@ To impede credential stuffing attacks (actually your mail users should be smart 
 With a "normal" mailcow installation, this can be typically be achieved by leveraging the plus-extension scheme:
 
 ### Plus Extension Addressing
-Just use user**\+extension**@domain.tld instead of *user*@domain.tld as your e-mail address and you are all set. Mailcow can be configured how the plus extension should be handled - I prefer rewriting of the subject line by adding a `[extension]` tag over direct delivery to a folder named `extension`.
+Just use *user*+**extension**@domain.tld instead of *user*@domain.tld as your e-mail address and you are all set. Mailcow can be configured how the plus extension should be handled - I prefer rewriting of the subject line by adding a `[extension]` tag over direct delivery to a folder named `extension`.
 
 However, there's a second solution for service specific e-mail addresses: **subdomain addressing**  
 
@@ -60,41 +60,29 @@ Check out this repository to your mailcow:dockerized installation directory (the
 ### Enable Plus Extension
 1. Login to mailcow UI as mailbox user
 2. Navigate to Mailbox->Settings
-3. Define "In Subject" as tagged mail handling routine:
-	![Screenshot Mailcow UI](res/README_1.png)
+3. Define "In Subject" as tagged mail handling routine:  
+![Screenshot Mailcow UI](res/README_1.png)
 
 
 ### Configure Subdomain Addressing
 Just execute the script SDA_setup.sh from the RSFA folder on your docker host.  
 This will:  
 
-- retrieve all mailbox names from all domains
-- create a new subdomain "mailboxname.domain" for each domain with dots (".") in mailbox names being translated to dashes ("-")  
-  E.g.:  
-    **Mailboxes:**  
-<<<<<<< Updated upstream
-    * foo@domain.tld
-    * john.doe@domain.tld
+* retrieve all mailbox names from all domains
+* create a new subdomain "mailboxname.domain" for each domain with dots (".") in mailbox names being translated to dashes ("-"), e.g.:  
+  **Mailboxes:**  
+  * joe@domain.tld
+  * john.doe@domain.tld  
+   
+  **Created subdomains:**  
+  * joe.domain.tld  
+  * john-doe.domain.tld
 
-    **Created subdomains:**  
-    * foo.domain.tld  
-    * john-doe.domain.tld
-=======
-      + joe@domain.tld
-      + john.doe@domain.tld
+* create a catch-all alias for the newly created subdomain, pointing to the respective mailbox, e.g.:  
+  `@john-doe.domain.tld` -> `john.doe@domain.tld`
 
-    **Created subdomains:**  
-    
-      + joe.domain.tld  
-      + john-doe.domain.tld
->>>>>>> Stashed changes
-
-- create a catch-all alias for the newly created subdomain, pointing to the respective mailbox  
-  E.g.:  
-    `@john-doe.domain.tld` -> `john.doe@domain.tld`
-
-- create a sender ACL to allow *mailbox* to send as \*@*subdomain* 
-- copy the DKIM configuration of each subdomain to all of its newly created subdomains
+* create a sender ACL to allow *mailbox* to send as \*@*subdomain* 
+* copy the DKIM configuration of each subdomain to all of its newly created subdomains
 
 Afterwards you still have to add respective MX (and DKIM / SPF) records to your DNS; check the **DNS** settings for each of your subdomains in mailcow UI for advice.  
 
