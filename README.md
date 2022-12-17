@@ -8,23 +8,23 @@ To impede credential stuffing attacks (actually your mail users should be smart 
 With a "normal" mailcow installation, this can be typically be achieved by leveraging the plus-extension scheme:
 
 ### Plus Extension Addressing
-Just use user**+extension**@domain.tld instead of *user*@domain.tld as your e-mail address and you are all set. Mailcow can be configured how the plus extension should be handled - I prefer rewriting of the subject line by adding a `[extension]` tag over direct delivery to a folder named `extension`.
+Just use user**\+extension**@domain.tld instead of *user*@domain.tld as your e-mail address and you are all set. Mailcow can be configured how the plus extension should be handled - I prefer rewriting of the subject line by adding a `[extension]` tag over direct delivery to a folder named `extension`.
 
 However, there's a second solution for service specific e-mail addresses: **subdomain addressing**  
 
-###Subdomain Addressing
+### Subdomain Addressing
 Subdomain addressing provides an additional subdomain for every configured user. That subdomain is then being configured as catch-all and every incoming e-mail will be delivered to the respective user's mailbox:
 
 Any mail sent to arbitrary-string@**user**.*domain.tld* will be delivered to **user**@*domain.tld*.
 
-###Problem
+### Problem
 Both addressing schemes shown above do exactly what we'd expect. However, there's one pitfall:
 
 Whenever you receive an e-mail to such an address and want to reply to it, the response would be sent from your mail account and your actual e-mail address would be used as sender address instead of the recipient/service specific one. 
 
 This could be circumvented by using an MUA that allows rewriting of the respective header lines, but this is cumbersome and not even possible on many MUAs, especially on your mobile devices.
 
-###Solution
+### Solution
 Let your mail system do the work for you:
 
 Every incoming mail addressed to either a plus-extension address or a subdomain address will be processed to reflect information on the original *To*-address in the mail's subject line as follows:  
@@ -34,7 +34,7 @@ Every incoming mail addressed to either a plus-extension address or a subdomain 
 | user+**extension**@domain.tld  | The quick brown fox jumps over the lazy dog | **[extension]** The quick brown fox jumps over the lazy dog  |
 | ***extension***@**user**.domain.tld  | The quick brown fox jumps over the lazy dog | \|***extension***@**user**\| The quick brown fox jumps over the lazy dog  |
  
-Whenever you reply to such an e-mail (or even write a new mail having respective tags in the subject line), the postfix submission service will apply a filter to these messages and
+Whenever you reply to such an e-mail (or even write a new mail having respective tags in the subject line), the postfix submission service (well, actually the cleanup service that is triggered from submission) will apply a filter to these messages and
 
 * Remove the tag from the subject line
 * Rewrite the header from address accordingly
@@ -72,13 +72,12 @@ This will:
 - create a new subdomain "mailboxname.domain" for each domain with dots (".") in mailbox names being translated to dashes ("-")  
   E.g.:  
     **Mailboxes:**  
-      + foo@domain.tld
-      + john.doe@domain.tld
+    * foo@domain.tld
+    * john.doe@domain.tld
 
     **Created subdomains:**  
-    
-      + foo.domain.tld  
-      + john-doe.domain.tld
+    * foo.domain.tld  
+    * john-doe.domain.tld
 
 - create a catch-all alias for the newly created subdomain, pointing to the respective mailbox  
   E.g.:  
