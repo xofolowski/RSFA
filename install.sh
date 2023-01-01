@@ -62,6 +62,10 @@ EOF
 	# modify submission transport in master.cf:
 	sed -i '/^submission/,/^[^ ]\+/ s/cleanup_service_name=smtp_sender_cleanup/cleanup_service_name=$rsfa_cleanup_service_name/g' ../data/conf/postfix/master.cf
 
+    logprint "master.cf - modifying SMTPS transport"
+	# modify SMTPS transport in master.cf:
+	sed -i '/^smtps/,/^[^ ]\+/ s/cleanup_service_name=smtp_sender_cleanup/cleanup_service_name=$rsfa_cleanup_service_name/g' ../data/conf/postfix/master.cf
+
     logprint "master.cf - modifying SoGo transport"
 	# modify SoGo transport in master.cf:
 	sed -i '/^588 /,/^[^ ]\+/ s/cleanup_service_name=smtp_sender_cleanup/cleanup_service_name=$rsfa_cleanup_service_name/g' ../data/conf/postfix/master.cf
