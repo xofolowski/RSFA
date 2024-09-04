@@ -29,7 +29,7 @@ from email.utils import COMMASPACE, formatdate
 EX_TEMPFAIL = 75
 EX_UNAVAILABLE = 69
 
-POSTMASTER = "postmaster@devroot.de"
+POSTMASTER = "!POSTMASTER!"
 BOUNCETEMPLATE = """\
 !!!!! Unable to send message !!!!!
 
