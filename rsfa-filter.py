@@ -95,14 +95,15 @@ def main():
     msg_in = message_from_file(sys.stdin)
 
     try:
-        re_plusext = re.compile(r'^(?P<subjstart>[^\[]*)\[(?P<ext>.*)\] (?P<subjrest>.*)$')
-        re_subdom = re.compile(r'^(?P<subjstart>[^|]*)[|](?P<ext>[^|]+@[^|]+)[|] (?P<subjrest>.*)$')
-        subject_in = ''.join(msg_in.get("Subject").splitlines())
+        re_plusext = re.compile(r'^(?P<subjstart>[^\[]*)\[(?P<ext>[^\]]+)\](?P<subjrest>.*)$')
+        re_subdom = re.compile(r'^(?P<subjstart>[^|]*)[|](?P<ext>[^|]+@[^|]+)[|](?P<subjrest>.*)$')
+        subject_in = ' '.join(msg_in.get("Subject").splitlines())
         m = re_plusext.search(subject_in)
         sender = msg_in.get("From")
         #sender = argv.sender
         if m != None:
             ## A plus extension tag was found in the subject
+            print(f"rsfa-filter: [info] Found plus extension tag in subject: {m.group('ext')}")
             subject = m.group('subjstart') + m.group('subjrest')
             new_from = sender.replace('@','+'+m.group('ext')+'@')
             msg_out = rewriteHeaders(msg_in,new_from,subject)
@@ -112,6 +113,7 @@ def main():
             m = re_subdom.search(subject_in)
             if m != None:
                 ## A subdomain tag was found in the subject
+                print(f"rsfa-filter: [info] Found subdomain tag in subject: {m.group('ext')}")
                 subject = m.group('subjstart') + m.group('subjrest')
                 new_from = re.sub(r'[^< ]+@([^> ]*)',m.group('ext')+r'.\1',sender)
                 sendmail_sender = extractSMTPaddr(new_from)[0]
