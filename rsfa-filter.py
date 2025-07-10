@@ -25,6 +25,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
+from email.header import decode_header, Header
 
 EX_TEMPFAIL = 75
 EX_UNAVAILABLE = 69
@@ -83,6 +84,21 @@ def rewriteHeaders(msg,sender,subj):
 def extractSMTPaddr(text):
     return(re.findall(r"[a-z0-9\.\-+_]+@[a-z0-9\.\-+_]+\.[a-z]+", text))
 
+def decode_subject(raw_subject):
+    """Decode a raw subject line to a UTF-8 string and remember the original parts."""
+    decoded_parts = decode_header(raw_subject)
+    utf8_string = ''.join(
+        part.decode(encoding or 'utf-8') if isinstance(part, bytes) else part
+        for part, encoding in decoded_parts
+    )
+    return utf8_string, decoded_parts
+
+def reencode_subject(utf8_subject, original_parts):
+    """Re-encode a UTF-8 subject string to match the original encoding."""
+    # naive implementation: re-encode entire subject using original encoding of the first part
+    first_encoding = original_parts[0][1] or 'utf-8'
+    return str(Header(utf8_subject, first_encoding))
+
 def main():
     parser = argparse.ArgumentParser(
             prog = "rsfa-filter.py",
@@ -97,14 +113,16 @@ def main():
     try:
         re_plusext = re.compile(r'^(?P<subjstart>[^\[]*)\[(?P<ext>[^\]]+)\](?P<subjrest>.*)$')
         re_subdom = re.compile(r'^(?P<subjstart>[^|]*)[|](?P<ext>[^|]+@[^|]+)[|](?P<subjrest>.*)$')
-        subject_in = ' '.join(msg_in.get("Subject").splitlines())
+        subject_in_utf8, subject_in_orig_parts  = decode_subject(msg_in.get("Subject"))
+        print(subject_in_utf8)
+        subject_in = ' '.join(subject_in_utf8.splitlines())
         m = re_plusext.search(subject_in)
         sender = msg_in.get("From")
         #sender = argv.sender
         if m != None:
             ## A plus extension tag was found in the subject
             print(f"rsfa-filter: [info] Found plus extension tag in subject: {m.group('ext')}")
-            subject = m.group('subjstart') + m.group('subjrest')
+            subject = reencode_subject(m.group('subjstart') + m.group('subjrest'), subject_in_orig_parts)
             new_from = sender.replace('@','+'+m.group('ext')+'@')
             msg_out = rewriteHeaders(msg_in,new_from,subject)
             sendmail_sender = sender
@@ -114,7 +132,7 @@ def main():
             if m != None:
                 ## A subdomain tag was found in the subject
                 print(f"rsfa-filter: [info] Found subdomain tag in subject: {m.group('ext')}")
-                subject = m.group('subjstart') + m.group('subjrest')
+                subject = reencode_subject(m.group('subjstart') + m.group('subjrest'), subject_in_orig_parts)
                 new_from = re.sub(r'[^< ]+@([^> ]*)',m.group('ext')+r'.\1',sender)
                 sendmail_sender = extractSMTPaddr(new_from)[0]
                 sendmail_recipients = " ".join(argv.recipients)
