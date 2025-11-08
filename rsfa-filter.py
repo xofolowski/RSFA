@@ -140,7 +140,7 @@ def main():
                 if checkACL(argv.authenticated_as,new_from):
                     msg_out = rewriteHeaders(msg_in,new_from,subject)
                 else:
-                    bouncetext = BOUNCETMPL % (sender, new_from, new_from, argv.authenticated_as)
+                    bouncetext = BOUNCETEMPLATE % (sender, new_from, new_from, argv.authenticated_as)
                     msg_out = makeBounceMail("MAILER DAEMON <" + POSTMASTER + ">", sender, "Delivery failed: Unauthorized sender rewrite requested", bouncetext, msg_in)
                     sendmail_sender = POSTMASTER
                     sendmail_recipients = argv.authenticated_as
