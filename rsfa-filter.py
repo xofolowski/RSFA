@@ -20,6 +20,8 @@ import sys
 import subprocess
 import re
 import argparse
+import logging, os
+
 from email import message_from_file
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -43,6 +45,15 @@ Please find your original email attached.
 
 """
 
+os.makedirs("/var/spool/postfix/filter_logs", exist_ok=True)
+logging.basicConfig(
+    level=os.getenv("LOGLEVEL","DEBUG"),
+    filename="/var/spool/postfix/filter_logs/filter.log",
+    format="%(asctime)s postfix/rsfa-filter [%(levelname)s] %(message)s",
+)
+log = logging.getLogger("filter")
+
+
 def makeBounceMail(bm_from, bm_to, subject, text, bouncemail):
     msg = MIMEMultipart()
     msg['From'] = bm_from
@@ -61,15 +72,16 @@ def checkACL(auth, nf):
     ## Search email address in new from header
     m = re.search(r'[^<]*<(?P<addr>[^>]*)>.*',nf)
 
+    log.info(f"Checking ACL for new FROM-address: {m.group('addr').lower()} - authenticated as {auth}")
     CHECKCMD = ['/usr/bin/sudo', '-u', 'postfix', '/usr/sbin/postmap', '-q', m.group('addr').lower(), 'mysql:/opt/postfix/conf/sql/mysql_virtual_sender_acl.cf']
     check_res = subprocess.run(CHECKCMD, capture_output=True).stdout.decode('UTF-8').strip().lower()
     if check_res == auth.lower():
         return(True)
     else:
-        print(f'Auth Failure: {check_res} does not match {auth}')
+        log.error(f'Auth Failure: <{check_res}> does not match {auth}')
         return(False)
 
-def rewriteHeaders(msg,sender,subj):
+def rewriteHeaders(msg,sender,subj,origSubj="unknown"):
     # remove DKIM Signature
     for header in msg._headers:
         if header[0].lower() == "dkim-signature":
@@ -79,6 +91,8 @@ def rewriteHeaders(msg,sender,subj):
 
     if msg.get("Return-Path") != None:
         msg.replace_header("Return-Path",sender)
+
+    msg.add_header("X-RSFA-Orig-Subject",origSubj)
     return(msg)
 
 def extractSMTPaddr(text):
@@ -114,48 +128,55 @@ def main():
         re_plusext = re.compile(r'^(?P<subjstart>[^\[]*)\[(?P<ext>[^\]]+)\](?P<subjrest>.*)$')
         re_subdom = re.compile(r'^(?P<subjstart>[^|]*)[|](?P<ext>[^|]+@[^|]+)[|](?P<subjrest>.*)$')
         subject_in_utf8, subject_in_orig_parts  = decode_subject(msg_in.get("Subject"))
-        print(subject_in_utf8)
         subject_in = ' '.join(subject_in_utf8.splitlines())
-        m = re_plusext.search(subject_in)
+        log.debug(f"Original message subject: {subject_in}")
+        m = re_subdom.search(subject_in)
         sender = msg_in.get("From")
-        #sender = argv.sender
+        log.debug(f"Original FROM: {sender}")
         if m != None:
-            ## A plus extension tag was found in the subject
-            print(f"rsfa-filter: [info] Found plus extension tag in subject: {m.group('ext')}")
+            ## A subdomain tag was found in the subject (xxx@subdomain)
+            log.info(f"Found subdomain tag in subject: {m.group('ext')}")
             subject = reencode_subject(m.group('subjstart') + m.group('subjrest'), subject_in_orig_parts)
-            new_from = sender.replace('@','+'+m.group('ext')+'@')
-            msg_out = rewriteHeaders(msg_in,new_from,subject)
-            sendmail_sender = sender
+            new_from = re.sub(r'[^< ]+@([^> ]*)',m.group('ext')+r'.\1',sender)
+            log.debug(f"Rewritten FROM: {new_from}")
+            sendmail_sender = extractSMTPaddr(new_from)[0]
             sendmail_recipients = " ".join(argv.recipients)
-        else:
-            m = re_subdom.search(subject_in)
-            if m != None:
-                ## A subdomain tag was found in the subject
-                print(f"rsfa-filter: [info] Found subdomain tag in subject: {m.group('ext')}")
-                subject = reencode_subject(m.group('subjstart') + m.group('subjrest'), subject_in_orig_parts)
-                new_from = re.sub(r'[^< ]+@([^> ]*)',m.group('ext')+r'.\1',sender)
-                sendmail_sender = extractSMTPaddr(new_from)[0]
-                sendmail_recipients = " ".join(argv.recipients)
-                # ACL checks are only required for subdomain addressing
-                if checkACL(argv.authenticated_as,new_from):
-                    msg_out = rewriteHeaders(msg_in,new_from,subject)
-                else:
-                    bouncetext = BOUNCETEMPLATE % (sender, new_from, new_from, argv.authenticated_as)
-                    msg_out = makeBounceMail("MAILER DAEMON <" + POSTMASTER + ">", sender, "Delivery failed: Unauthorized sender rewrite requested", bouncetext, msg_in)
-                    sendmail_sender = POSTMASTER
-                    sendmail_recipients = argv.authenticated_as
+            # ACL checks are only required for subdomain addressing
+            if checkACL(argv.authenticated_as,new_from):
+                msg_out = rewriteHeaders(msg_in,new_from,subject,msg_in.get("Subject"))
             else:
-                sys.stderr.write("rsfa-filter: [error] found neither subdomain addressing nor plus-extension in original subject.\n")
-                sys.exit(EX_UNAVAILABLE)
+                bouncetext = BOUNCETEMPLATE % (sender, new_from, new_from, argv.authenticated_as)
+                msg_out = makeBounceMail("MAILER DAEMON <" + POSTMASTER + ">", sender, "Delivery failed: Unauthorized sender rewrite requested", bouncetext, msg_in)
+                sendmail_sender = POSTMASTER
+                sendmail_recipients = argv.authenticated_as
+        else:
+            m = re_plusext.search(subject_in)
+            if m != None:
+                ## A plus extension tag was found in the subject
+                log.info(f"Found plus extension tag in subject: {m.group('ext')}")
+                subject = reencode_subject(m.group('subjstart') + m.group('subjrest'), subject_in_orig_parts)
+                new_from = sender.replace('@','+'+m.group('ext')+'@')
+                log.debug(f"Rewritten FROM: {new_from}")
+                msg_out = rewriteHeaders(msg_in,new_from,subject,msg_in.get("Subject"))
+                sendmail_sender = sender
+                sendmail_recipients = " ".join(argv.recipients)
+            else:
+                # neither a plus extension tag, nor a subdomain tag was found in the subject
+                log.info("Found neither subdomain addressing nor plus-extension in original subject.\n")
+                msg_out = msg_in # we keep the message as is
+                msg_out.add_header("X-RSFA-Orig-Subject","unmodified") # and just add an RSFA header
+                sendmail_sender = argv.sender
+                sendmail_recipients = " ".join(argv.recipients)
 
         SENDMAIL = ["/usr/sbin/sendmail", "-G", "-i", "-C", "/opt/postfix/conf", "-f", sendmail_sender, "--", sendmail_recipients]
         queue_cmd = subprocess.run(SENDMAIL,input=msg_out.as_string(),text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-        print("rsfa-filter: [info] finished mail processing, handing over to postfix again.")
-        print(queue_cmd.stdout)
+        log.info("Finished mail processing, handing over to postfix again.")
+        if queue_cmd.stdout:
+            log.info(queue_cmd.stdout)
         sys.exit(queue_cmd.returncode)
 
     except Exception as err:
-        print(f"Unexpected {err=}, {type(err)=}")
+        log.error(f"Unexpected {err=}, {type(err)=}")
         sys.exit(EX_TEMPFAIL)
 
 

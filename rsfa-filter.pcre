@@ -1,2 +1,4 @@
-/^Subject: [^\[]*\[[^\]]*\].*/ FILTER rsfa-filter: 
-/^Subject: [^|]*\|[^|]*@[^|]*\|.*/ FILTER rsfa-filter:
+# do not filter any mails that already ran through RSFA
+/^X-RSFA-Orig-Subject: .*/                        DUNNO
+# Match all Subjects - required for encoded subject headers, where we cannot explicitly match on subject tags
+/^Subject: .*/                                    FILTER xof-filter:
